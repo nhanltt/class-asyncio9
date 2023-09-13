@@ -80,6 +80,7 @@ async def CoroWashingMachine(w, client):
         # wait_next = round(10*random.random(),2)
         # print(f"{time.ctime()} - [{w.SERIAL}] Waiting new message... {wait_next} seconds.")
         # await asyncio.sleep(wait_next)
+        print(f'{time.ctime()} - {w.SERIAL} waiting')
         w.event = asyncio.Event()
         if w.MACHINE_STATUS == 'OFF':
             # continue
@@ -126,7 +127,9 @@ async def CoroWashingMachine(w, client):
 
 async def listen(w, client):
     async with client.messages() as messages:
+        print(f'{time.ctime()} {w.SERIAL} subscribe for topic v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}')
         await client.subscribe(f"v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}")
+        await client.subscribe(f"v1cdti/app/get/{student_id}/model-01/")
         async for message in messages:
             mgs_decode = json.loads(message.payload)
             # print(mgs_decode)
@@ -179,11 +182,14 @@ async def listen(w, client):
                     if mgs_decode['value'] == 'CLEAR':
                         w.MACHINE_STATUS = 'OFF'
                         await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
-                        
+
+            if message.topic.matches(f"v1cdti/app/get/{student_id}/model-01/"):
+                print(f'{time.ctime()} - get monitor request')
+                await publish_message(w, client, 'app', 'monitor', 'STATUS', w.MACHINE_STATUS)                        
                 
 
 async def main():
-    n = 2
+    n = 10
     # w = WashingMachine(serial='SN-001')
     # async with aiomqtt.Client("test.mosquitto.org") as client:
     # async with aiomqtt.Client("broker.hivemq.com") as client:
@@ -191,9 +197,15 @@ async def main():
 
     w1 = WashingMachine(serial='SN-001')
     w2 = WashingMachine(serial='SN-002')
+    ws = [WashingMachine(serial=f'SN-00{i}') for i in range(n)]
+    
+
     async with aiomqtt.Client("test.mosquitto.org") as client:
     # async with aiomqtt.Client("broker.hivemq.com") as client:
-       await asyncio.gather(listen(w1, client), CoroWashingMachine(w1, client),listen(w2, client), CoroWashingMachine(w2, client))
+    #    await asyncio.gather(listen(w1, client), CoroWashingMachine(w1, client),listen(w2, client), CoroWashingMachine(w2, client))
+        listeners = [listen(w, client) for w in ws]
+        washer = [CoroWashingMachine(w, client) for w in ws]
+        await asyncio.gather(*listeners, *washer)
     
     
 

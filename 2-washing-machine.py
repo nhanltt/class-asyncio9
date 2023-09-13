@@ -29,31 +29,33 @@ class WashingMachine:
     def __init__(self, serial):
         self.MACHINE_STATUS = 'OFF'
         self.SERIAL = serial
+        self.task = None
+        # self.event = asyncio.Event()
 
-    async def waiting(self):
-        try:
-            print(f'{time.ctime()} - Start waiting')
-            await asyncio.sleep(30)
-        except asyncio.CancelledError:
-            print(f'{time.ctime()} - Waiting function is canceled!')
-            raise
-        
+async def wait_event(event):
+    print(f'{time.ctime()} Waiting for event ...')
+    await event.wait()
+    print(f'{time.ctime()} Get new information! ')
+
+async def waiting(w, next_status, status_type):
+    try:
+        print(f'{time.ctime()} - Start waiting')
+        await asyncio.sleep(20)
         print(f'{time.ctime()} - Waiting 10 second already! -> TIMEOUT!')
-        self.MACHINE_STATUS = 'FAULT'
-        self.FAULT_TYPE = 'TIMEOUT'
-        print(f'{time.ctime()} - [{self.SERIAL}] STATUS: {self.MACHINE_STATUS}')
+        w.MACHINE_STATUS = next_status
+        w.FAULT_TYPE = status_type
+        print(f'{time.ctime()} - [{w.SERIAL}] STATUS: {w.MACHINE_STATUS}')
+    except asyncio.CancelledError:
+        print(f'{time.ctime()} - Waiting function is canceled!')
+        
 
 
-    async def waiting_task(self):
-        self.task = asyncio.create_task(self.waiting())
-        return self.task
-
-    async def cancel_waiting(self):
-        self.task.cancel()
-        try:
-            await self.task
-        except asyncio.CancelledError:
-            print(f'{time.ctime()} - Get message before timeout!')
+async def cancel_waiting(task):
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        print(f'{time.ctime()} - Get message before timeout!')
         
 
 async def publish_message(w, client, app, action, name, value):
@@ -75,11 +77,14 @@ async def publish_message(w, client, app, action, name, value):
 async def CoroWashingMachine(w, w_sensor, client):
     # washing coroutine
     while True:
-        wait_next = round(10*random.random(),2)
-        print(f"{time.ctime()} - [{w.SERIAL}] Waiting new message... {wait_next} seconds.")
-        await asyncio.sleep(wait_next)
+        # wait_next = round(10*random.random(),2)
+        # print(f"{time.ctime()} - [{w.SERIAL}] Waiting new message... {wait_next} seconds.")
+        # await asyncio.sleep(wait_next)
+        w.event = asyncio.Event()
         if w.MACHINE_STATUS == 'OFF':
-            continue
+            # continue
+            waiter_task = asyncio.create_task(wait_event(w.event))
+            await waiter_task
     
         if w.MACHINE_STATUS == 'READY':
             print(f"{time.ctime()} - [{w.SERIAL}-{w.MACHINE_STATUS}]")
@@ -89,24 +94,33 @@ async def CoroWashingMachine(w, w_sensor, client):
 
             w.MACHINE_STATUS = 'FILLING'
             await publish_message(w, client, 'hw', 'get', 'STATUS', 'FILLING')
-            task = w.waiting_task()
-            await task 
-    
+            w.task = asyncio.create_task(waiting(w, 'FAULT', 'TIMEOUT'))
+            await w.task
 
         if w.MACHINE_STATUS == 'FAULT':
             await publish_message(w, client, 'hw', 'get', 'FAULT', w.FAULT_TYPE)
-            while w.MACHINE_STATUS == 'FAULT':
-                print(f"{time.ctime()} - [{w.SERIAL}] Waiting to clear fault...")
-                await asyncio.sleep(1)
+            
+            print(f"{time.ctime()} - [{w.SERIAL}] Waiting to clear fault...")
+            waiter_task = asyncio.create_task(wait_event(w.event))
+            await waiter_task
 
         if w.MACHINE_STATUS == 'HEATING':
-            task = w.waiting_task()
-            await task
-            while w.MACHINE_STATUS == 'HEATING':
-                await asyncio.sleep(2)
+            w.task = asyncio.create_task(waiting(w, 'FAULT', 'TIMEOUT'))
+            await w.task
  
-        if w.MACHINE_STATUS == 'WASHING':
-            continue
+        if w.MACHINE_STATUS == 'WASH':
+            w.task = asyncio.create_task(waiting(w, 'RINSE', ''))
+            await w.task
+
+        if w.MACHINE_STATUS == 'RINSE':
+            await publish_message(w, client, 'hw', 'get', 'STATUS', 'RINSE')
+            w.task = asyncio.create_task(waiting(w, 'SPIN', ''))
+            await w.task
+
+        if w.MACHINE_STATUS == 'SPIN':
+            await publish_message(w, client, 'hw', 'get', 'STATUS', 'SPIN')
+            w.task = asyncio.create_task(waiting(w, 'OFF', ''))
+            await w.task
 
         
 
@@ -115,11 +129,13 @@ async def listen(w, w_sensor, client):
         await client.subscribe(f"v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}")
         async for message in messages:
             mgs_decode = json.loads(message.payload)
+            # print(mgs_decode)
             if message.topic.matches(f"v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}"):
-                print(f"FROM MQTT: [{mgs_decode['serial']} {mgs_decode['name']} {mgs_decode['value']}]")
+                print(f"{time.ctime()} FROM MQTT: [{mgs_decode['serial']} {mgs_decode['name']} {mgs_decode['value']}]")
 
-                if mgs_decode['name'] == "STATUS":
+                if (mgs_decode['name'] == "STATUS"):
                     w.MACHINE_STATUS = mgs_decode['value']
+                    w.event.set()
 
                 if w.MACHINE_STATUS == 'FILLING':
                     if mgs_decode['name'] == "WATERLEVEL":
@@ -128,8 +144,7 @@ async def listen(w, w_sensor, client):
                             w.MACHINE_STATUS = 'HEATING'
                             print(f'{time.ctime()} - [{w.SERIAL}] STATUS: {w.MACHINE_STATUS}')
                             await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
-
-                        await w.cancel_waiting()
+                            await cancel_waiting(w.task)
 
                 if w.MACHINE_STATUS == 'HEATING':
                     if mgs_decode['name'] == "TEMPERATURE":
@@ -139,7 +154,28 @@ async def listen(w, w_sensor, client):
                             print(f'{time.ctime()} - [{w.SERIAL}] STATUS: {w.MACHINE_STATUS}')
                             await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
 
-                        await w.cancel_waiting()
+                        await cancel_waiting(w.task)
+
+                if w.MACHINE_STATUS == 'WASH':
+                    if mgs_decode['name'] == "FAULT":
+                        w.MACHINE_STATUS = 'FAULT'
+                        w.FAULT_TYPE = 'IMBALANCE'
+                        await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
+                        await cancel_waiting(w.task)
+                
+                if w.MACHINE_STATUS == 'RINSE':
+                    if mgs_decode['name'] == "FAULT":
+                        w.MACHINE_STATUS = 'FAULT'
+                        w.FAULT_TYPE = 'MOTORFAILED'
+                        await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
+                        await cancel_waiting(w.task)
+                
+                if w.MACHINE_STATUS == 'SPIN':
+                    if mgs_decode['name'] == "FAULT":
+                        w.MACHINE_STATUS = 'FAULT'
+                        w.FAULT_TYPE = 'MOTORFAILED'
+                        await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
+                        await cancel_waiting(w.task)
 
                 if mgs_decode['name'] == "FAULT":
                     if mgs_decode['value'] == 'CLEAR':
@@ -151,8 +187,8 @@ async def listen(w, w_sensor, client):
 async def main():
     w = WashingMachine(serial='SN-001')
     w_sensor = MachineStatus()
-    # async with aiomqtt.Client("test.mosquitto.org") as client:
-    async with aiomqtt.Client("broker.hivemq.com") as client:
+    async with aiomqtt.Client("test.mosquitto.org") as client:
+    # async with aiomqtt.Client("broker.hivemq.com") as client:
        await asyncio.gather(listen(w, w_sensor, client), CoroWashingMachine(w, w_sensor, client))
     
 
@@ -165,6 +201,7 @@ if sys.platform.lower() == "win32" or os.name.lower() == "nt":
 asyncio.run(main())
 
 '''
+v1cdti/hw/set/6310301021/model-01/SN-001
 {
     "action"    :   "set",
     "project"   :   "6310301021",
@@ -200,5 +237,21 @@ asyncio.run(main())
     "serial"    :   "sn-01",
     "name"      :   "TEMPERATURE",
     "value"     :   "REACH"
+}
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-01",
+    "name"      :   "FAULT",
+    "value"     :   "IMBALANCE"
+}
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-01",
+    "name"      :   "FAULT",
+    "value"     :   "MOTORFAILED"
 }
 '''

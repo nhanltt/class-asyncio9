@@ -40,7 +40,7 @@ async def wait_event(event):
 async def waiting(w, next_status, status_type):
     try:
         print(f'{time.ctime()} - Start waiting')
-        await asyncio.sleep(20)
+        await asyncio.sleep(30)
         print(f'{time.ctime()} - Waiting 10 second already! -> TIMEOUT!')
         w.MACHINE_STATUS = next_status
         w.FAULT_TYPE = status_type
@@ -74,7 +74,7 @@ async def publish_message(w, client, app, action, name, value):
                         , payload=json.dumps(payload))
 
 
-async def CoroWashingMachine(w, w_sensor, client):
+async def CoroWashingMachine(w, client):
     # washing coroutine
     while True:
         # wait_next = round(10*random.random(),2)
@@ -124,7 +124,7 @@ async def CoroWashingMachine(w, w_sensor, client):
 
         
 
-async def listen(w, w_sensor, client):
+async def listen(w, client):
     async with client.messages() as messages:
         await client.subscribe(f"v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}")
         async for message in messages:
@@ -139,8 +139,7 @@ async def listen(w, w_sensor, client):
 
                 if w.MACHINE_STATUS == 'FILLING':
                     if mgs_decode['name'] == "WATERLEVEL":
-                        w_sensor.fulldetect = mgs_decode['value']
-                        if w_sensor.fulldetect == 'FULL':
+                        if mgs_decode['value'] == 'FULL':
                             w.MACHINE_STATUS = 'HEATING'
                             print(f'{time.ctime()} - [{w.SERIAL}] STATUS: {w.MACHINE_STATUS}')
                             await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
@@ -148,8 +147,7 @@ async def listen(w, w_sensor, client):
 
                 if w.MACHINE_STATUS == 'HEATING':
                     if mgs_decode['name'] == "TEMPERATURE":
-                        w_sensor.heatreach = mgs_decode['value']
-                        if w_sensor.heatreach == 'REACH':
+                        if mgs_decode['value'] == 'REACH':
                             w.MACHINE_STATUS = 'WASH'
                             print(f'{time.ctime()} - [{w.SERIAL}] STATUS: {w.MACHINE_STATUS}')
                             await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
@@ -185,11 +183,18 @@ async def listen(w, w_sensor, client):
                 
 
 async def main():
-    w = WashingMachine(serial='SN-001')
-    w_sensor = MachineStatus()
+    n = 2
+    # w = WashingMachine(serial='SN-001')
+    # async with aiomqtt.Client("test.mosquitto.org") as client:
+    # async with aiomqtt.Client("broker.hivemq.com") as client:
+    #    await asyncio.gather(listen(w, w_sensor, client), CoroWashingMachine(w, w_sensor, client))
+
+    w1 = WashingMachine(serial='SN-001')
+    w2 = WashingMachine(serial='SN-002')
     async with aiomqtt.Client("test.mosquitto.org") as client:
     # async with aiomqtt.Client("broker.hivemq.com") as client:
-       await asyncio.gather(listen(w, w_sensor, client), CoroWashingMachine(w, w_sensor, client))
+       await asyncio.gather(listen(w1, client), CoroWashingMachine(w1, client),listen(w2, client), CoroWashingMachine(w2, client))
+    
     
 
 
@@ -199,59 +204,3 @@ if sys.platform.lower() == "win32" or os.name.lower() == "nt":
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 # Run your async application as usual
 asyncio.run(main())
-
-'''
-v1cdti/hw/set/6310301021/model-01/SN-001
-{
-    "action"    :   "set",
-    "project"   :   "6310301021",
-    "model"     :   "model-01",
-    "serial"    :   "sn-01",
-    "name"      :   "STATUS",
-    "value"     :   "READY"
-}
-
-{
-    "action"    :   "set",
-    "project"   :   "6310301021",
-    "model"     :   "model-01",
-    "serial"    :   "sn-01",
-    "name"      :   "FAULT",
-    "value"     :   "CLEAR"
-}
-'''
-'''
-{
-    "action"    :   "set",
-    "project"   :   "6310301021",
-    "model"     :   "model-01",
-    "serial"    :   "sn-01",
-    "name"      :   "WATERLEVEL",
-    "value"     :   "FULL"
-}
-
-{
-    "action"    :   "set",
-    "project"   :   "6310301021",
-    "model"     :   "model-01",
-    "serial"    :   "sn-01",
-    "name"      :   "TEMPERATURE",
-    "value"     :   "REACH"
-}
-{
-    "action"    :   "set",
-    "project"   :   "6310301021",
-    "model"     :   "model-01",
-    "serial"    :   "sn-01",
-    "name"      :   "FAULT",
-    "value"     :   "IMBALANCE"
-}
-{
-    "action"    :   "set",
-    "project"   :   "6310301021",
-    "model"     :   "model-01",
-    "serial"    :   "sn-01",
-    "name"      :   "FAULT",
-    "value"     :   "MOTORFAILED"
-}
-'''

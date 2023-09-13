@@ -1,0 +1,55 @@
+'''
+v1cdti/hw/set/6310301021/model-01/SN-002
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-02",
+    "name"      :   "STATUS",
+    "value"     :   "READY"
+}
+
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-02",
+    "name"      :   "FAULT",
+    "value"     :   "CLEAR"
+}
+'''
+'''
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-02",
+    "name"      :   "WATERLEVEL",
+    "value"     :   "FULL"
+}
+
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-02",
+    "name"      :   "TEMPERATURE",
+    "value"     :   "REACH"
+}
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-02",
+    "name"      :   "FAULT",
+    "value"     :   "IMBALANCE"
+}
+{
+    "action"    :   "set",
+    "project"   :   "6310301021",
+    "model"     :   "model-01",
+    "serial"    :   "sn-02",
+    "name"      :   "FAULT",
+    "value"     :   "MOTORFAILED"
+}
+'''

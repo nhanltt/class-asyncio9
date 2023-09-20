@@ -1,16 +1,13 @@
 7-command: 
-sub: app/get/63.../model-01/+ #สั่งทุกเครื่องส่งสถานะให้ monitor
-pub: hw/get #เอาสถานะของทุกเครื่อง
+sub: v1cdti/app/get/{student_id}/model-01/+ #สั่งทุกเครื่องส่งสถานะให้ monitor
+pub: v1cdti/hw/set/{student_id}/model-01/+
 pub: hw/set/63.../model01/sn-... #สั่งให้ทุกเครื่องทำงาน
 
 6-monitor:
 sub: app/monitor/63.../model-01/+
 
 washing center:
-sub: hw/get/SN-...
-sub: app/get # when machine 
-sub: hw/set
-sub: hw/get/
-pub: app/get/sn-...
-
-# command send command each 10 seconds to machine to publish status for monitoring
+sub: v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}
+sub: v1cdti/app/get/{student_id}/model-01/
+pub: v1cdti/hw/get/{student_id}/model-01/
+pub: app/monitor/{student_id}/model-01/{w.SERIAL}

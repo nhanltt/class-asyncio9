@@ -56,7 +56,6 @@ async def listen(client):
         print(f'{time.ctime()}  subscribe for topic v1cdti/hw/get/{student_id}/model-01/')
         print(f'{time.ctime()}  subscribe for topic v1cdti/app/get/{student_id}/model-01/')
         await client.subscribe(f"v1cdti/hw/get/{student_id}/model-01/+")
-        await client.subscribe(f"v1cdti/app/get/{student_id}/model-01/+")
         async for message in messages:
             mgs_decode = json.loads(message.payload)
             # print(mgs_decode)

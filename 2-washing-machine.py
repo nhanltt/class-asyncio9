@@ -8,6 +8,16 @@ import sys
 import os
 
 student_id = "6310301021"
+S_OFF = "OFF"
+S_READY = "READY"
+S_LID = "CLOSE"
+S_FILLING = "FILLING"
+S_FULLLEVEL = "FULL"
+S_HEATING = "HEATING"
+S_TEMPERATURE = "REACH"
+S_RINSE = "RINSE"
+S_SPIN = "SPIN"
+S_WASH = "WASH"
 
 class MachineStatus():
     def __init__(self) -> None:
@@ -84,6 +94,7 @@ async def CoroWashingMachine(w, client):
         w.event = asyncio.Event()
         if w.MACHINE_STATUS == 'OFF':
             # continue
+            await publish_message(w, client, 'hw', 'get', 'STATUS', w.MACHINE_STATUS)
             waiter_task = asyncio.create_task(wait_event(w.event))
             await waiter_task
     
@@ -123,7 +134,6 @@ async def CoroWashingMachine(w, client):
             w.task = asyncio.create_task(waiting(w, 'OFF', ''))
             await w.task
 
-        
 
 async def listen(w, client):
     async with client.messages() as messages:
@@ -134,7 +144,7 @@ async def listen(w, client):
             mgs_decode = json.loads(message.payload)
             # print(mgs_decode)
             if message.topic.matches(f"v1cdti/hw/set/{student_id}/model-01/{w.SERIAL}"):
-                print(f"{time.ctime()} FROM MQTT: [{mgs_decode['serial']} {mgs_decode['name']} {mgs_decode['value']}]")
+                print(f"{time.ctime()} - FROM MQTT: [{mgs_decode['serial']} {mgs_decode['name']} {mgs_decode['value']}]")
 
                 if (mgs_decode['name'] == "STATUS"):
                     w.MACHINE_STATUS = mgs_decode['value']
@@ -189,20 +199,12 @@ async def listen(w, client):
                 
 
 async def main():
-    n = 10
-    # w = WashingMachine(serial='SN-001')
-    # async with aiomqtt.Client("test.mosquitto.org") as client:
-    # async with aiomqtt.Client("broker.hivemq.com") as client:
-    #    await asyncio.gather(listen(w, w_sensor, client), CoroWashingMachine(w, w_sensor, client))
-
-    w1 = WashingMachine(serial='SN-001')
-    w2 = WashingMachine(serial='SN-002')
+    n = 2
     ws = [WashingMachine(serial=f'SN-00{i}') for i in range(n)]
     
 
     async with aiomqtt.Client("test.mosquitto.org") as client:
     # async with aiomqtt.Client("broker.hivemq.com") as client:
-    #    await asyncio.gather(listen(w1, client), CoroWashingMachine(w1, client),listen(w2, client), CoroWashingMachine(w2, client))
         listeners = [listen(w, client) for w in ws]
         washer = [CoroWashingMachine(w, client) for w in ws]
         await asyncio.gather(*listeners, *washer)
